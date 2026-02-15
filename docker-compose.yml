@@ -1,79 +1,168 @@
-version: "1"
+version: "3.9"
+
 services:
   docs:
     container_name: docs
-    image: nginx
+    image: nginx:1.25-alpine
+    restart: unless-stopped
     ports:
       - "80:80"
     volumes:
-      - "./nginx/html:/usr/share/nginx/html:ro"
+      - ./nginx/html:/usr/share/nginx/html:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   master:
     container_name: master
     image: arjones/pyspark:2.4.5
-    restart: always
+    platform: linux/amd64
+    restart: unless-stopped
     command: ["/opt/spark/sbin/start-master.sh"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
+      SPARK_MASTER_HOST: master
+      SPARK_MASTER_PORT: 7077
     ports:
-      - 4040:4040
-      - 6066:6066
-      - 7077:7077
-      - 8080:8080
+      - "4040:4040"
+      - "6066:6066"
+      - "7077:7077"
+      - "8080:8080"
     volumes:
-      - ./code:/app
-      - ./dataset:/dataset
+      - ./code:/app:rw
+      - ./dataset:/dataset:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 2G
 
   worker1:
     container_name: worker1
     image: arjones/pyspark:2.4.5
-    restart: always
+    platform: linux/amd64
+    restart: unless-stopped
     command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2G
     depends_on:
       - master
     ports:
-      - 4041:4040
+      - "4041:4040"
       - "6066"
       - "7077"
-      - 8081:8080
+      - "8081:8080"
     volumes:
-      - ./code:/app
-      - ./dataset:/dataset
+      - ./code:/app:rw
+      - ./dataset:/dataset:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "1"
+          memory: 1G
 
   worker2:
     container_name: worker2
     image: arjones/pyspark:2.4.5
-    restart: always
+    platform: linux/amd64
+    restart: unless-stopped
     command: ["/opt/spark/sbin/start-slave.sh", "spark://master:7077"]
     environment:
       MASTER: spark://master:7077
       SPARK_NO_DAEMONIZE: 1
+      SPARK_WORKER_CORES: 2
+      SPARK_WORKER_MEMORY: 2G
     depends_on:
       - master
     ports:
-      - 4042:4040
+      - "4042:4040"
       - "6066"
       - "7077"
-      - 8082:8080
+      - "8082:8080"
     volumes:
-      - ./code:/app
-      - ./dataset:/dataset
+      - ./code:/app:rw
+      - ./dataset:/dataset:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "1"
+          memory: 1G
 
   jupyter:
     container_name: jupyter
     image: arjones/pyspark:2.4.5
-    restart: always
+    platform: linux/amd64
+    restart: unless-stopped
     environment:
       MASTER: spark://master:7077
+      JUPYTER_ENABLE_LAB: "yes"
+      SPARK_DRIVER_HOST: jupyter
+      SPARK_DRIVER_PORT: 7001
+      SPARK_NETWORK_TIMEOUT: 600s
+      SPARK_EXECUTOR_HEARTBEAT_INTERVAL: 60s
+      SPARK_HOME: /opt/spark
+      PYTHONPATH: /opt/spark/python:/opt/spark/python/lib/py4j-0.10.7-src.zip
     depends_on:
       - master
     ports:
       - "8888:8888"
     volumes:
-      - ./jupyter/notebook:/notebook
-      - ./dataset:/dataset
-      - ./code:/app
+      - ./jupyter/notebook:/notebook:rw
+      - ./dataset:/dataset:ro
+      - ./code:/app:rw
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+        reservations:
+          cpus: "1"
+          memory: 1G
+
+volumes:
+  spark-master-data:
+    driver: local
+  spark-worker1-data:
+    driver: local
+  spark-worker2-data:
+    driver: local
+
+networks:
+  default:
+    name: pyspark-network
+    driver: bridge
